@@ -5,7 +5,12 @@ import {
     Input,
     Button
 } from 'antd';
+import PropTypes from 'prop-types'
 
+
+import storageUtils from '../../utils/storageUtils'
+import MemoryUtils from '../../utils/MemoryUtils'
+import {reqLogin} from '../../api'
 import logo from '../../assets/imsges/logo.png'
 import './index.less'
 
@@ -15,7 +20,36 @@ const Item = Form.Item
 登陆的路由组件
  */
 export default class Login extends Component {
+
+    state = {
+        errorMsg :''    //错误提示信息
+    }
+
+    //登陆请求
+    login = async (username, password) => {
+        const result = await reqLogin(username, password)
+        if (result.status===0){   //登陆成功
+            const user = result.data
+            //保存user，登陆一次之后，保存记住
+            /*
+              localStorage       关掉浏览器还在   保存在本地
+              sessionStorage    关掉浏览器不在了  保存在内存
+           */
+            // localStorage.setItem('USER_KEY',JSON.stringify(user))
+            // store.set('USER_KEY',user)
+            storageUtils.saveUser(user)  //存在localStorage中
+            MemoryUtils.user = user      //存在MemoryUtils内存中     并且希望一上来，就可以打开应用，所以在inde入口文件中，也存储上
+
+            //跳转到管理页面
+            this.props.history.replace('/')
+        } else {         //登陆失败
+            this.setState({
+                errorMsg: result.msg
+            })
+        }
+    }
   render() {
+        const {errorMsg} = this.state
     return (
       <div className= 'login'>
         <div className='login-header'>
@@ -24,8 +58,14 @@ export default class Login extends Component {
         </div>
         <div className='login-content'>
           <div className='login-box'>
-            <div className='title'>用户登陆</div>
-            <LoginFrom/>
+              <div className="error-msg-wrap">
+                  <div className={errorMsg ? "show" : ""}>
+                      {errorMsg}
+                  </div>
+              </div>
+
+              <div className='title'>用户登陆</div>
+            <LoginFrom login={this.login}/>
           </div>
         </div>
       </div>
@@ -36,14 +76,23 @@ export default class Login extends Component {
 //包含<From/>被包装组件
 class LoginFrom extends React.Component{
 
-    clickLogin = () => {
+    // 想接受上边的函数，需要先声明
+    static propTypes = {
+        login:PropTypes.func.isRequired
+    }
+
+        clickLogin = () => {
         //只有当验证没有错误时，才输出输入的数据
-        this.props.form.validateFields((error,values) => {
+        this.props.form.validateFields(async (error,values) => {
             console.log('validateFields',error,values)
             if (!error) {
                 console.log('收集表单数据', values)
+                // const result = await ajax('/login',values,'POST')    这样写有点麻烦，每次写都要调用'/login',values,'POST'
+                const {username, password} = values
+                // const result = await reqLogin(username, password)     //针对每一个接口封装一个函数
+                this.props.login(username, password)
             }else{
-                this.props.form.resetFields()   //重置所有输入框
+                // this.props.form.resetFields()   //重置所有输入框
             }
         })
         //得到表单数据
@@ -55,7 +104,7 @@ class LoginFrom extends React.Component{
         //半编程式验证
         if (!value){
             callback('必须输入密码')
-        } else if (value.length >4 || value.length < 8) {
+        } else if (value.length < 4 || value.length > 8) {
             callback('密码必须4-8位')
         }else {
             callback()    //callback不传参数代表成功
